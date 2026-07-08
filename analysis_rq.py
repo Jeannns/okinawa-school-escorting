@@ -100,6 +100,7 @@ def prepare_school_trips(pt: pd.DataFrame) -> pd.DataFrame:
     df["annual_income"]             = pd.to_numeric(df["annual_income"],             errors="coerce")
     df["hh_size_excl_under5"]       = pd.to_numeric(df["hh_size_excl_under5"],       errors="coerce")
     df["id_b_zone_code"]            = pd.to_numeric(df["id_b_zone_code"],            errors="coerce")
+    df["id_c_zone_code"]            = pd.to_numeric(df["id_c_zone_code"],            errors="coerce")
     df["dest_zone_code"]            = df["dest_zone_code"].astype(str).str.strip()
     df["addr_zone_code"]            = df["addr_zone_code"].astype(str).str.strip()
 
@@ -165,31 +166,69 @@ def analysis1(pt: pd.DataFrame) -> None:
     fig.tight_layout()
     save_fig(fig, "H1a_boxplot_travel_time", OUT_A1)
 
-    # ── H1b: Zone-crossing by school level (cross-tab + Chi-square) ───────────
-    section("H1b — Zone-Crossing Rate by School Level")
+    # ── H1b: Zone-crossing by school level at B-zone and C-zone ─────────────
+    # Zone code format: B(1-2 digits, no padding) + C(1 digit) + local(2 digits)
+    #   4-digit code → B = s[0],    C = s[1]   (B-zone 1-9)
+    #   5-digit code → B = s[0:2],  C = s[2]   (B-zone 10-56)
+    # Advisor feedback: B-zone (56 units) is too coarse; C-zone (144 units) preferred.
+    section("H1b — Zone-Crossing Rate by School Level (B-zone & C-zone)")
 
-    # Build C-zone → B-zone lookup from full dataset
-    lookup = full_df[full_df["addr_zone_code"].notna() & full_df["id_b_zone_code"].notna()][
-        ["addr_zone_code", "id_b_zone_code"]
-    ].drop_duplicates()
-    c_to_b = dict(zip(lookup["addr_zone_code"], lookup["id_b_zone_code"]))
+    def _parse_bc(code_str):
+        """Return (b_zone, c_zone) from a 4-5 digit zone code string."""
+        s = str(code_str).strip()
+        if len(s) == 4:
+            return int(s[0]), int(s[1])
+        if len(s) == 5:
+            return int(s[:2]), int(s[2])
+        return np.nan, np.nan
 
-    school["dest_b_zone"] = school["dest_zone_code"].map(c_to_b)
-    school["home_b_zone"] = school["id_b_zone_code"]
-    school["zone_cross"]  = (school["home_b_zone"] != school["dest_b_zone"]).astype(int)
+    _dest_bc = school["dest_zone_code"].apply(
+        lambda x: pd.Series(_parse_bc(x), index=["dest_b", "dest_c"]))
+    school = pd.concat([school.reset_index(drop=True),
+                        _dest_bc.reset_index(drop=True)], axis=1)
 
-    ct = pd.crosstab(school["level"], school["zone_cross"])
-    ct.columns = ["Same Zone", "Cross Zone"]
-    ct["Total"]   = ct.sum(axis=1)
-    ct["Cross %"] = (ct["Cross Zone"] / ct["Total"] * 100).round(1)
-    print("\n  Zone-crossing cross-tabulation:")
-    print(ct.loc[LEVEL_ORDER].to_string())
+    school["home_b"] = school["id_b_zone_code"]
+    school["home_c"] = school["id_c_zone_code"]
 
-    chi2, p_chi, dof, _ = scipy_stats.chi2_contingency(
-        ct[["Same Zone", "Cross Zone"]].loc[LEVEL_ORDER]
-    )
-    print(f"\n  Chi-square: χ² = {chi2:.2f}, df = {dof}, p = {p_chi:.2e}")
-    print(f"  → H1b PARTIALLY SUPPORTED — Elem/JHS suppressed by catchment zone policy")
+    # B-zone cross: home B ≠ dest B
+    school["bzone_cross"] = (school["home_b"] != school["dest_b"]).astype(float)
+    # C-zone cross: (home B, home C) ≠ (dest B, dest C)
+    school["czone_cross"] = (
+        (school["home_b"] != school["dest_b"]) |
+        (school["home_c"] != school["dest_c"])
+    ).astype(float)
+
+    _valid_b = school["dest_b"].notna() & school["home_b"].notna()
+    _valid_c = _valid_b & school["home_c"].notna() & school["dest_c"].notna()
+
+    print(f"\n  Trips with parseable destination zone: {_valid_b.sum():,} / {len(school):,}")
+    print(f"  (missing/unparseable dest_zone_code: {(~_valid_b).sum():,} trips excluded)")
+
+    # --- B-zone (56 zones) ---
+    _sch_b = school.loc[_valid_b].copy()
+    ct_b = pd.crosstab(_sch_b["level"], _sch_b["bzone_cross"])
+    ct_b.columns = ["Same B-zone", "Cross B-zone"]
+    ct_b["Total"]   = ct_b.sum(axis=1)
+    ct_b["Cross %"] = (ct_b["Cross B-zone"] / ct_b["Total"] * 100).round(1)
+    print(f"\n  [B-zone: 56 zones — coarser]")
+    print(ct_b.reindex(LEVEL_ORDER).to_string())
+    _ct_b_vals = ct_b[["Same B-zone", "Cross B-zone"]].reindex(LEVEL_ORDER).dropna()
+    chi2_b, p_b, dof_b, _ = scipy_stats.chi2_contingency(_ct_b_vals)
+    print(f"\n  Chi-square (B-zone): χ² = {chi2_b:.2f}, df = {dof_b}, p = {p_b:.2e}")
+
+    # --- C-zone (144 zones, per advisor feedback) ---
+    _sch_c = school.loc[_valid_c].copy()
+    ct_c = pd.crosstab(_sch_c["level"], _sch_c["czone_cross"])
+    ct_c.columns = ["Same C-zone", "Cross C-zone"]
+    ct_c["Total"]   = ct_c.sum(axis=1)
+    ct_c["Cross %"] = (ct_c["Cross C-zone"] / ct_c["Total"] * 100).round(1)
+    print(f"\n  [C-zone: 144 zones — finer, per advisor feedback]")
+    print(ct_c.reindex(LEVEL_ORDER).to_string())
+    _ct_c_vals = ct_c[["Same C-zone", "Cross C-zone"]].reindex(LEVEL_ORDER).dropna()
+    chi2_c, p_c, dof_c, _ = scipy_stats.chi2_contingency(_ct_c_vals)
+    print(f"\n  Chi-square (C-zone): χ² = {chi2_c:.2f}, df = {dof_c}, p = {p_c:.2e}")
+    print(f"  → H1b — C-zone provides finer spatial resolution (~2.6× more zones than B)")
+    print(f"  → Elem/JHS cross-zone rate expected low due to catchment-zone assignment")
 
     # ── H1c: OLS regression — car ownership → travel time ─────────────────────
     section("H1c — Car Ownership and School Travel Distance (OLS)")
