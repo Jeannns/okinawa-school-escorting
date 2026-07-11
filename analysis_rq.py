@@ -692,16 +692,26 @@ def analysis2(pt: pd.DataFrame, supp: pd.DataFrame) -> None:
     # ── RQ2c: Trip Chaining Among Escorts ────────────────────────────────────
     section("RQ2c — Trip Chaining: Escort + Commute on the Same Day")
     #
-    # RQ: Among escorts who also commute on survey day, who chains the school
-    #     escort trip with their work trip?
+    # RQ: Among escorts who also commute on the survey day, who chains the
+    #     school escort trip with their work trip?
     # Sample (logit): escorts with has_work_trip=1 (n=335)
     # DV:   trip_chaining = 1 if escort trip immediately precedes/follows a
     #       work trip (purpose 01/02) in the person's trip sequence
     # IVs:  C(sl), female, hh_size, num_children
-    # Excluded from logit:
-    #   car          — 499/500 escorts own a car (near-perfect separation)
-    #   emp dummies  — homemakers cannot commute → DV=0 for entire ref group
-    #                  (perfect separation); commute filter resolves this
+    #
+    # Variables tested but excluded:
+    #   car          — 499/500 escorts own a car → near-perfect separation;
+    #                  no meaningful variation to estimate coefficient
+    #   emp_fulltime — After restricting to commuting escorts (has_work_trip=1),
+    #   emp_parttime   homemakers are already filtered out (homemakers cannot
+    #                  commute → they fall into has_work_trip=0 and are excluded).
+    #                  Reference group (emp_fulltime=0, emp_parttime=0) shrinks
+    #                  to n=5 (3 residual homemakers + 2 university students),
+    #                  making estimates unreliable (p>0.30, AIC +2.2 vs baseline)
+    #   safety_concern — Chaining rate is virtually identical between safety-
+    #                  motivated escorts (35.5%) and others (34.7%); β=−0.07,
+    #                  p=0.785. Chaining is driven by time constraints, not
+    #                  escort motivation (AIC +1.9 vs baseline)
 
     P_KEY_C = HH_KEY_A + ['person_number']
 
@@ -805,14 +815,22 @@ def analysis2(pt: pd.DataFrame, supp: pd.DataFrame) -> None:
     print(f"  Reference: school level = Kindergarten")
     print(f"  car and employment dummies excluded (see note above)")
 
+    _kg_rate = _df_c[_df_c['sl']==1]['trip_chaining'].mean()*100
+    _hs_rate = _df_c[_df_c['sl']==3]['trip_chaining'].mean()*100
     print(f"\n  Key findings (RQ2c):")
-    print(f"  - {_n_work_c}/{_n_c} ({_n_work_c/_n_c*100:.0f}%) of escorts commute on survey day")
-    print(f"  - Of commuting escorts, {_comm_rate:.1f}% chain escort with work trip")
-    print(f"  - Chaining rate declines with school level: "
-          f"KG {_df_c[_df_c['sl']==1]['trip_chaining'].mean()*100:.0f}% → "
-          f"HS {_df_c[_df_c['sl']==3]['trip_chaining'].mean()*100:.0f}%")
-    print(f"  - Female escorts significantly more likely to chain (β=+0.57, p<0.05)")
+    print(f"  - {_n_work_c}/{_n_c} ({_n_work_c/_n_c*100:.0f}%) of escorts also commute on survey day")
+    print(f"  - Of commuting escorts, {_comm_rate:.1f}% chain escort trip with work trip")
+    print(f"  - Chaining declines with school level: KG {_kg_rate:.0f}% → HS {_hs_rate:.0f}%")
+    print(f"    (younger children have less flexible school schedules → chaining more efficient")
+    print(f"     than a return trip home first)")
+    print(f"  - Female escorts chain significantly more (β=+0.57, p<0.05)")
+    print(f"    → different time-management strategies between sexes")
     print(f"  - Larger household size reduces chaining (β=−0.36, p<0.10)")
+    print(f"    → more household responsibilities limit scheduling flexibility")
+    print(f"  - More school-age children increases chaining (β=+0.45, p<0.10)")
+    print(f"    → parents already optimise a structured morning routine")
+    print(f"  - Low overall fit (McFadden R²=0.052): chaining also depends on factors")
+    print(f"    not captured here (work start time, home–school–workplace distance)")
 
     print(f"\n  Analysis 2 outputs → {OUT_A2}")
 
