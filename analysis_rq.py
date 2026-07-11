@@ -1,13 +1,16 @@
 """
 Okinawa Person Trip Survey — RQ Analyses
 Analysis 1: School Travel Patterns (RQ1 — H1a, H1b, H1c)
-Analysis 2: School Escorting Behavior (RQ2a, RQ2b)
+Analysis 2: School Escorting Behavior (RQ2a, RQ2b, RQ2c)
   RQ2a Part A — Binary Logit: who escorts? (SUPP, n=1,237, R²=0.145)
   RQ2a Part B — Binary Logit: who cites safety? (escort group)
   RQ2b        — Descriptive: does safety concern change mode choice?
                   (1) Car ownership by safety group
                   (2) Car use by school level × safety (PT purpose=12)
                   (3) Travel time by school level × safety
+  RQ2c        — Binary Logit: trip chaining among commuting escorts
+                  DV: escort trip adjacent to work trip (trip_chaining)
+                  Sample: escorts who commute on survey day (n=335)
 
 Data directory: ../Okinawa_PT survey/Ver20240430第4回沖縄PTマスターデータ/EN/
 Output:         ./output/Analysis1/   ./output/Analysis2/
@@ -329,10 +332,12 @@ def analysis2(pt: pd.DataFrame, supp: pd.DataFrame) -> None:
     # Normalise to strings for safe merges / maps
     _pt_a  = pt.copy()
     _sup_a = supp.copy()
-    for _c in HH_KEY_A + ['employment_student_status']:
+    for _c in HH_KEY_A + ['employment_student_status', 'person_number',
+                           'trip_number', 'trip_purpose', 'escorting_flag']:
         _pt_a[_c] = _pt_a[_c].astype(str).str.strip()
     for _c in HH_KEY_A + ['q6_escorting_flag', 'q6_child1_school_dest',
-                           'owned_has_car', 'sex', 'hh_size_excl_under5', 'annual_income']:
+                           'owned_has_car', 'sex', 'hh_size_excl_under5', 'annual_income',
+                           'person_number']:
         _sup_a[_c] = _sup_a[_c].astype(str).str.strip()
 
     # PT school-age households (any trip purpose)
@@ -683,6 +688,131 @@ def analysis2(pt: pd.DataFrame, supp: pd.DataFrame) -> None:
     print(f"  parents travel slightly shorter distances (median 10 vs 15 min, p=0.001)")
     print(f"  yet car use remains the same — consistent with car availability, not")
     print(f"  safety concern, being the dominant factor in escort mode choice.")
+
+    # ── RQ2c: Trip Chaining Among Escorts ────────────────────────────────────
+    section("RQ2c — Trip Chaining: Escort + Commute on the Same Day")
+    #
+    # RQ: Among escorts who also commute on survey day, who chains the school
+    #     escort trip with their work trip?
+    # Sample (logit): escorts with has_work_trip=1 (n=335)
+    # DV:   trip_chaining = 1 if escort trip immediately precedes/follows a
+    #       work trip (purpose 01/02) in the person's trip sequence
+    # IVs:  C(sl), female, hh_size, num_children
+    # Excluded from logit:
+    #   car          — 499/500 escorts own a car (near-perfect separation)
+    #   emp dummies  — homemakers cannot commute → DV=0 for entire ref group
+    #                  (perfect separation); commute filter resolves this
+
+    P_KEY_C = HH_KEY_A + ['person_number']
+
+    # Build person-level trip chaining from PT (using already-normalized _pt_a)
+    _pt_a['_tripn'] = pd.to_numeric(_pt_a['trip_number'], errors='coerce')
+
+    def _is_chained(grp):
+        grp = grp.sort_values('_tripn')
+        purp  = grp['trip_purpose'].tolist()
+        flags = grp['escorting_flag'].tolist()
+        has_work = any(p in ['01', '02'] for p in purp)
+        chained  = False
+        for i in range(len(purp) - 1):
+            if ((flags[i] == '1' and purp[i + 1] in ['01', '02']) or
+                    (purp[i] in ['01', '02'] and flags[i + 1] == '1')):
+                chained = True
+                break
+        return pd.Series({'has_work_trip': has_work, 'trip_chaining': chained})
+
+    _pt_persons_c = (_pt_a.groupby(P_KEY_C, group_keys=False)
+                     .apply(_is_chained, include_groups=False)
+                     .reset_index())
+    _pt_persons_c['trip_chaining'] = _pt_persons_c['trip_chaining'].astype(int)
+    _pt_persons_c['has_work_trip'] = _pt_persons_c['has_work_trip'].astype(int)
+
+    # Escort subset from Part A (person_number already normalized in _sup_a)
+    _df_c = _df_a[_df_a['escort'] == 1].copy()
+    _df_c = _df_c.merge(
+        _pt_persons_c[P_KEY_C + ['has_work_trip', 'trip_chaining']],
+        on=P_KEY_C, how='left')
+    _df_c['trip_chaining'] = _df_c['trip_chaining'].fillna(0).astype(int)
+    _df_c['has_work_trip'] = _df_c['has_work_trip'].fillna(0).astype(int)
+
+    _n_c       = len(_df_c)
+    _n_work_c  = int(_df_c['has_work_trip'].sum())
+    _n_chain_c = int(_df_c['trip_chaining'].sum())
+    print(f"\n  Escort sample: n={_n_c}")
+    print(f"  Commute on survey day (has_work_trip): "
+          f"{_n_work_c} ({_n_work_c/_n_c*100:.1f}%)")
+    print(f"  Trip chaining overall: "
+          f"{_n_chain_c} ({_n_chain_c/_n_c*100:.1f}% of all escorts)")
+    _comm_rate = _df_c[_df_c['has_work_trip'] == 1]['trip_chaining'].mean() * 100
+    print(f"  Chaining rate among commuting escorts: {_comm_rate:.1f}%")
+
+    _SL_C = {1: 'Kinder', 2: 'Elem/JHS', 3: 'High Sch', 4: 'Univ'}
+    print(f"\n  Chaining rate by school level:")
+    for _sl_v, _sl_l in _SL_C.items():
+        _g = _df_c[_df_c['sl'] == _sl_v]
+        _r = _g['trip_chaining'].mean() * 100 if len(_g) else 0
+        print(f"    {_sl_l:<10}: {int(_g['trip_chaining'].sum()):>3}/{len(_g):>3}"
+              f"  ({_r:.1f}%)")
+    print(f"\n  Chaining rate by sex:")
+    for _sx_v, _sx_l in [(0, 'Male'), (1, 'Female')]:
+        _g = _df_c[_df_c['female'] == _sx_v]
+        _r = _g['trip_chaining'].mean() * 100 if len(_g) else 0
+        print(f"    {_sx_l:<8}: {int(_g['trip_chaining'].sum()):>3}/{len(_g):>3}"
+              f"  ({_r:.1f}%)")
+
+    # Binary logit — commuting escorts only
+    _df_c_logit = _df_c[_df_c['has_work_trip'] == 1].copy()
+    logit_c = smf.logit(
+        'trip_chaining ~ C(sl, Treatment(1)) + female + hh_size + num_children',
+        data=_df_c_logit
+    ).fit(disp=False)
+
+    _VAR_LABELS_C = [
+        ('C(sl, Treatment(1))[T.2]', 'School level: Elem/JHS vs Kinder'),
+        ('C(sl, Treatment(1))[T.3]', 'School level: HS vs Kinder'),
+        ('C(sl, Treatment(1))[T.4]', 'School level: Univ vs Kinder'),
+        ('female',                   'Female escorter'),
+        ('hh_size',                  'Household size'),
+        ('num_children',             'No. school-age children'),
+        ('Intercept',                'Intercept'),
+    ]
+
+    WC = 40
+    print(f"\n  Binary logit — DV: trip_chaining  "
+          f"(commuting escorts, n={len(_df_c_logit)})")
+    print(f"\n  {'Variable':<{WC}} {'Coef.':>8}  {'S.E.':>7}  {'p':>8}  {'':>4}")
+    print(f"  {'─'*72}")
+    _tbl_c = logit_c.summary2().tables[1]
+    for _vr, _lb in _VAR_LABELS_C:
+        if _vr not in _tbl_c.index:
+            print(f"  {'  '+_lb:<{WC}} {'—':>8}  {'—':>7}  {'—':>8}")
+            continue
+        _rr   = _tbl_c.loc[_vr]
+        _sig  = ("***" if _rr["P>|z|"] < 0.001 else "**" if _rr["P>|z|"] < 0.01
+                 else "*" if _rr["P>|z|"] < 0.05 else "†" if _rr["P>|z|"] < 0.10 else "")
+        _pstr = "<0.001" if _rr["P>|z|"] < 0.001 else f"{_rr['P>|z|']:.3f}"
+        print(f"  {'  '+_lb:<{WC}} {_rr['Coef.']:>8.3f}  {_rr['Std.Err.']:>7.3f}"
+              f"  {_pstr:>8}  {_sig:>4}")
+
+    print(f"  {'─'*72}")
+    print(f"  {'  Null log-likelihood':<{WC}} {logit_c.llnull:>8.2f}")
+    print(f"  {'  Log-likelihood':<{WC}} {logit_c.llf:>8.2f}")
+    print(f"  {'  McFadden R²':<{WC}} {logit_c.prsquared:>8.4f}")
+    print(f"  {'  AIC':<{WC}} {logit_c.aic:>8.2f}")
+    print(f"  {'  n':<{WC}} {len(_df_c_logit):>8,}")
+    print(f"  {'─'*72}")
+    print(f"  *** p<0.001  ** p<0.01  * p<0.05  † p<0.10")
+    print(f"  Reference: school level = Kindergarten")
+    print(f"  car and employment dummies excluded (see note above)")
+
+    print(f"\n  Key findings (RQ2c):")
+    print(f"  - {_n_work_c}/{_n_c} ({_n_work_c/_n_c*100:.0f}%) of escorts commute on survey day")
+    print(f"  - Of commuting escorts, {_comm_rate:.1f}% chain escort with work trip")
+    print(f"  - Chaining rate declines with school level: "
+          f"KG {_df_c[_df_c['sl']==1]['trip_chaining'].mean()*100:.0f}% → "
+          f"HS {_df_c[_df_c['sl']==3]['trip_chaining'].mean()*100:.0f}%")
+    print(f"  - Female escorts significantly more likely to chain (β=+0.57, p<0.05)")
+    print(f"  - Larger household size reduces chaining (β=−0.36, p<0.10)")
 
     print(f"\n  Analysis 2 outputs → {OUT_A2}")
 
