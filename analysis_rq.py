@@ -381,12 +381,12 @@ def analysis2(pt: pd.DataFrame, supp: pd.DataFrame) -> None:
     _df_a['inc_unknown'] = (_df_a['income'] == 0).astype(int)
     _df_a['sl']         = _df_a['sl'].astype(int)
 
-    # E1: Employment status dummies
+    # E1+E2: Employment status dummies + number of school-age children
     # Codebook: 1=self-employed, 2=corporate officer, 3=regular employee, 4=dispatch worker
     #           5=part-time/contract, 6=homemaker (ref), 7=unemployed
-    #           8=university student, 9=HS student, 10=Elem/JHS student, 11=kindergartener
-    # Reference group: homemaker (6); unemployed (7) and other codes also fall here.
-    # Note: codes 8–11 (student/child respondents = siblings escorting) are in reference group.
+    #           8=university student, 9=HS student, 13=other
+    # Filter: remove codes 7,8,9,13 (unemployed, student-siblings, other) so that
+    #   reference group = homemaker only (code 6); 132 rows removed.
     _df_a['emp_raw']      = pd.to_numeric(_df_a['employment_student_status'], errors='coerce')
     _df_a['emp_fulltime'] = _df_a['emp_raw'].isin([1, 2, 3, 4]).astype(int)
     _df_a['emp_parttime'] = (_df_a['emp_raw'] == 5).astype(int)
@@ -395,68 +395,86 @@ def analysis2(pt: pd.DataFrame, supp: pd.DataFrame) -> None:
     _df_a = _df_a.merge(_hh_num_children, on=HH_KEY_A, how='left')
     _df_a['num_children'] = _df_a['num_children'].fillna(0).astype(int)
 
+    # Filter to parental respondents only (exclude student-siblings, unemployed, other)
+    _df_ext = _df_a[~_df_a['emp_raw'].isin([7, 8, 9, 13])].copy()
+
     _n_esc_a  = int(_df_a['escort'].sum())
     _n_nesc_a = int(len(_df_a) - _n_esc_a)
-    print(f"\n  Sample: n={len(_df_a):,} (escorts={_n_esc_a}, non-escorts={_n_nesc_a})")
-    print(pd.crosstab(_df_a['sl'], _df_a['escort'],
-                      rownames=['sl (1=KG,2=Elem,3=HS,4=Univ)'],
-                      colnames=['escort'], margins=True))
+    print(f"\n  Baseline sample: n={len(_df_a):,} (escorts={_n_esc_a}, non-escorts={_n_nesc_a})")
+    print(f"  Extended sample: n={len(_df_ext):,} "
+          f"(escorts={int(_df_ext['escort'].sum())}, "
+          f"non-escorts={int(len(_df_ext)-_df_ext['escort'].sum())})")
+    print(f"  Excluded: {len(_df_a)-len(_df_ext)} rows "
+          f"(116 school-type 'other' + 132 student-siblings/unemployed/other employment)")
+    print(f"  num_children dist: {_df_ext['num_children'].value_counts().sort_index().to_dict()}")
 
-    # Descriptive stats for new IVs
-    print(f"\n  Employment distribution (E1):")
-    _emp_labels = {1:'Self-empl',2:'Corp.officer',3:'Regular',4:'Dispatch',
-                   5:'Part-time',6:'Homemaker',7:'Unemployed',8:'Univ.std',9:'HS.std',
-                   10:'Elem.std',11:'KG',13:'Other'}
-    for _k, _cnt in _df_a['emp_raw'].value_counts().sort_index().items():
-        _lbl = _emp_labels.get(int(_k), str(_k)) if not pd.isna(_k) else 'NaN'
-        print(f"    {_lbl:<15} ({int(_k) if not pd.isna(_k) else 'NaN'}): {_cnt:>4}  "
-              f"{'← fulltime' if _k in [1,2,3,4] else '← parttime' if _k==5 else '← reference'}")
-    print(f"  emp_fulltime: n={_df_a['emp_fulltime'].sum()} ({_df_a['emp_fulltime'].mean()*100:.1f}%)")
-    print(f"  emp_parttime: n={_df_a['emp_parttime'].sum()} ({_df_a['emp_parttime'].mean()*100:.1f}%)")
-    print(f"  num_children: mean={_df_a['num_children'].mean():.2f}, "
-          f"dist={_df_a['num_children'].value_counts().sort_index().to_dict()}")
-
-    # Baseline model (original IVs)
+    # Baseline model (original paper, n=1,237)
     logit_a_base = smf.logit(
         'escort ~ car + C(sl, Treatment(1)) + female + hh_size + income + inc_unknown',
         data=_df_a
     ).fit(disp=False)
 
-    # Extended model (E1+E2 added)
+    # Extended model: E1+E2, ref=homemaker (code 6), n=989
     logit_a = smf.logit(
         'escort ~ car + C(sl, Treatment(1)) + female + hh_size + income + inc_unknown'
         ' + emp_fulltime + emp_parttime + num_children',
-        data=_df_a
+        data=_df_ext
     ).fit(disp=False)
 
-    # Model comparison
-    print(f"\n  Model fit comparison:")
-    print(f"    {'Model':<30}  {'McFadden R²':>12}  {'AIC':>10}  {'LL':>12}")
-    print(f"    {'-'*68}")
-    print(f"    {'Baseline (original IVs)':<30}  {logit_a_base.prsquared:>12.4f}  "
-          f"{logit_a_base.aic:>10.2f}  {logit_a_base.llf:>12.2f}")
-    print(f"    {'Extended (+E1 emp, +E2 children)':<30}  {logit_a.prsquared:>12.4f}  "
-          f"{logit_a.aic:>10.2f}  {logit_a.llf:>12.2f}")
-    _delta_r2 = logit_a.prsquared - logit_a_base.prsquared
-    _delta_aic = logit_a.aic - logit_a_base.aic
-    print(f"    {'Δ (Extended − Baseline)':<30}  {_delta_r2:>+12.4f}  {_delta_aic:>+10.2f}")
+    # Combined results table: Baseline vs Extended
+    _VAR_LABELS = [
+        ('car',                       'Car ownership'),
+        ('C(sl, Treatment(1))[T.2]',  'School level: Elem/JHS vs Kinder'),
+        ('C(sl, Treatment(1))[T.3]',  'School level: HS vs Kinder'),
+        ('C(sl, Treatment(1))[T.4]',  'School level: Univ vs Kinder'),
+        ('female',                    'Female escorter'),
+        ('hh_size',                   'Household size'),
+        ('income',                    'Income'),
+        ('inc_unknown',               'Income unknown'),
+        ('emp_fulltime',              'Employment: Full-time [E1]'),
+        ('emp_parttime',              'Employment: Part-time [E1]'),
+        ('num_children',              'No. school-age children [E2]'),
+        ('Intercept',                 'Intercept'),
+    ]
 
-    print(f"\n  Extended model results (E1+E2):")
-    print(f"  McFadden R² = {logit_a.prsquared:.4f}  |  AIC = {logit_a.aic:.2f}")
-    print(f"  Log-Likelihood = {logit_a.llf:.2f}  |  Null LL = {logit_a.llnull:.2f}")
-    print(f"\n  {'Variable':<36} {'Coef':>8}  {'SE':>8}  {'z':>7}  {'p':>8}  {'Sig':>4}")
-    print(f"  {'-'*74}")
-    _tbl_a = logit_a.summary2().tables[1]
-    for _var, _row in _tbl_a.iterrows():
-        _sig = ("***" if _row["P>|z|"] < 0.001 else
-                "**"  if _row["P>|z|"] < 0.01  else
-                "*"   if _row["P>|z|"] < 0.05  else "")
-        _mark = " ← E1" if "emp_" in _var else " ← E2" if "num_children" in _var else ""
-        print(f"  {_var:<36} {_row['Coef.']:>8.4f}  {_row['Std.Err.']:>8.4f}  "
-              f"{_row['z']:>7.4f}  {_row['P>|z|']:>8.4f}  {_sig:>4}{_mark}")
-    print("  Significance: * p<0.05  ** p<0.01  *** p<0.001")
-    print("  Note: Reference group for employment = homemaker (code 6) + unemployed (7) + other."
-          " Codes 8–11 (student-siblings who escort) also fall in reference.")
+    def _fmt(m, var):
+        tbl = m.summary2().tables[1]
+        if var not in tbl.index:
+            return "—", "—", "—"
+        r = tbl.loc[var]
+        sig = ("***" if r["P>|z|"] < 0.001 else "**" if r["P>|z|"] < 0.01
+               else "*" if r["P>|z|"] < 0.05 else "†" if r["P>|z|"] < 0.10 else "")
+        pstr = "<0.001" if r["P>|z|"] < 0.001 else f"{r['P>|z|']:.3f}"
+        return f"{r['Coef.']:.3f}{sig}", f"{r['Std.Err.']:.3f}", pstr
+
+    W = 36
+    print(f"\n  {'Variable':<{W}} {'Baseline':>12} {'':>7} {'':>8}  "
+          f"{'Extended':>12} {'':>7} {'':>8}")
+    print(f"  {'':.<{W}} {'Coef.':>12} {'S.E.':>7} {'p':>8}  "
+          f"{'Coef.':>12} {'S.E.':>7} {'p':>8}")
+    print(f"  {'─'*88}")
+    for _var, _lbl in _VAR_LABELS:
+        _is_new = _var in ('emp_fulltime', 'emp_parttime', 'num_children')
+        c1, s1, p1 = _fmt(logit_a_base, _var)
+        c3, s3, p3 = _fmt(logit_a,      _var)
+        _mk = "→ " if _is_new else "  "
+        print(f"  {_mk}{_lbl:<{W-2}} {c1:>12} {s1:>7} {p1:>8}  {c3:>12} {s3:>7} {p3:>8}")
+
+    print(f"  {'─'*88}")
+    print(f"  {'  Null log-likelihood':<{W}} {logit_a_base.llnull:>12.2f} {'':>7} {'':>8}  "
+          f"{logit_a.llnull:>12.2f}")
+    print(f"  {'  Log-likelihood':<{W}} {logit_a_base.llf:>12.2f} {'':>7} {'':>8}  "
+          f"{logit_a.llf:>12.2f}")
+    print(f"  {'  McFadden R²':<{W}} {logit_a_base.prsquared:>12.4f} {'':>7} {'':>8}  "
+          f"{logit_a.prsquared:>12.4f}")
+    print(f"  {'  AIC':<{W}} {logit_a_base.aic:>12.2f} {'':>7} {'':>8}  "
+          f"{logit_a.aic:>12.2f}")
+    print(f"  {'  n':<{W}} {len(_df_a):>12,} {'':>7} {'':>8}  {len(_df_ext):>12,}")
+    print(f"  {'─'*88}")
+    print(f"  *** p<0.001  ** p<0.01  * p<0.05  † p<0.10")
+    print(f"  Reference: school level = Kindergarten; employment = Homemaker (code 6)")
+    print(f"  AIC not directly comparable across models (different sample sizes)")
+    print(f"  → = variables added in extended model (E1/E2)")
 
     # ── RQ2a Part B: Binary Logit — who cites safety? ────────────────────────
     section("RQ2a Part B — Binary Logit: Safety Concern Among Escort Group")
