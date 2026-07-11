@@ -343,10 +343,16 @@ def analysis2(pt: pd.DataFrame, supp: pd.DataFrame) -> None:
     # Youngest school-age child per HH from PT
     _emp_sl_map = {'11': 1, '10': 2, '9': 4, '8': 5}
     _children_a = (_pt_a[_pt_a['_emp'].isin(['8', '9', '10', '11'])]
-                   [HH_KEY_A + ['_emp']].copy())
+                   [HH_KEY_A + ['_emp', 'person_number']].copy())
     _children_a['sl_pt'] = _children_a['_emp'].map(_emp_sl_map)
     _hh_yng = (_children_a.sort_values('sl_pt')
                .groupby(HH_KEY_A)['sl_pt'].first().reset_index())
+
+    # E2: Distinct school-age children per HH (person-level count from PT)
+    _hh_num_children = (
+        _children_a[HH_KEY_A + ['person_number']].drop_duplicates()
+        .groupby(HH_KEY_A).size().reset_index(name='num_children')
+    )
 
     # SUPP merged to school_hh; both escort and non-escort rows
     _sup_a['flag'] = _sup_a['q6_escorting_flag']
@@ -375,6 +381,20 @@ def analysis2(pt: pd.DataFrame, supp: pd.DataFrame) -> None:
     _df_a['inc_unknown'] = (_df_a['income'] == 0).astype(int)
     _df_a['sl']         = _df_a['sl'].astype(int)
 
+    # E1: Employment status dummies
+    # Codebook: 1=self-employed, 2=corporate officer, 3=regular employee, 4=dispatch worker
+    #           5=part-time/contract, 6=homemaker (ref), 7=unemployed
+    #           8=university student, 9=HS student, 10=Elem/JHS student, 11=kindergartener
+    # Reference group: homemaker (6); unemployed (7) and other codes also fall here.
+    # Note: codes 8–11 (student/child respondents = siblings escorting) are in reference group.
+    _df_a['emp_raw']      = pd.to_numeric(_df_a['employment_student_status'], errors='coerce')
+    _df_a['emp_fulltime'] = _df_a['emp_raw'].isin([1, 2, 3, 4]).astype(int)
+    _df_a['emp_parttime'] = (_df_a['emp_raw'] == 5).astype(int)
+
+    # E2: Number of school-age children per HH (distinct persons from PT)
+    _df_a = _df_a.merge(_hh_num_children, on=HH_KEY_A, how='left')
+    _df_a['num_children'] = _df_a['num_children'].fillna(0).astype(int)
+
     _n_esc_a  = int(_df_a['escort'].sum())
     _n_nesc_a = int(len(_df_a) - _n_esc_a)
     print(f"\n  Sample: n={len(_df_a):,} (escorts={_n_esc_a}, non-escorts={_n_nesc_a})")
@@ -382,24 +402,61 @@ def analysis2(pt: pd.DataFrame, supp: pd.DataFrame) -> None:
                       rownames=['sl (1=KG,2=Elem,3=HS,4=Univ)'],
                       colnames=['escort'], margins=True))
 
-    logit_a = smf.logit(
+    # Descriptive stats for new IVs
+    print(f"\n  Employment distribution (E1):")
+    _emp_labels = {1:'Self-empl',2:'Corp.officer',3:'Regular',4:'Dispatch',
+                   5:'Part-time',6:'Homemaker',7:'Unemployed',8:'Univ.std',9:'HS.std',
+                   10:'Elem.std',11:'KG',13:'Other'}
+    for _k, _cnt in _df_a['emp_raw'].value_counts().sort_index().items():
+        _lbl = _emp_labels.get(int(_k), str(_k)) if not pd.isna(_k) else 'NaN'
+        print(f"    {_lbl:<15} ({int(_k) if not pd.isna(_k) else 'NaN'}): {_cnt:>4}  "
+              f"{'← fulltime' if _k in [1,2,3,4] else '← parttime' if _k==5 else '← reference'}")
+    print(f"  emp_fulltime: n={_df_a['emp_fulltime'].sum()} ({_df_a['emp_fulltime'].mean()*100:.1f}%)")
+    print(f"  emp_parttime: n={_df_a['emp_parttime'].sum()} ({_df_a['emp_parttime'].mean()*100:.1f}%)")
+    print(f"  num_children: mean={_df_a['num_children'].mean():.2f}, "
+          f"dist={_df_a['num_children'].value_counts().sort_index().to_dict()}")
+
+    # Baseline model (original IVs)
+    logit_a_base = smf.logit(
         'escort ~ car + C(sl, Treatment(1)) + female + hh_size + income + inc_unknown',
         data=_df_a
     ).fit(disp=False)
 
-    print(f"\n  McFadden R² = {logit_a.prsquared:.4f}  (document: 0.145)")
-    print(f"  AIC = {logit_a.aic:.2f}")
+    # Extended model (E1+E2 added)
+    logit_a = smf.logit(
+        'escort ~ car + C(sl, Treatment(1)) + female + hh_size + income + inc_unknown'
+        ' + emp_fulltime + emp_parttime + num_children',
+        data=_df_a
+    ).fit(disp=False)
+
+    # Model comparison
+    print(f"\n  Model fit comparison:")
+    print(f"    {'Model':<30}  {'McFadden R²':>12}  {'AIC':>10}  {'LL':>12}")
+    print(f"    {'-'*68}")
+    print(f"    {'Baseline (original IVs)':<30}  {logit_a_base.prsquared:>12.4f}  "
+          f"{logit_a_base.aic:>10.2f}  {logit_a_base.llf:>12.2f}")
+    print(f"    {'Extended (+E1 emp, +E2 children)':<30}  {logit_a.prsquared:>12.4f}  "
+          f"{logit_a.aic:>10.2f}  {logit_a.llf:>12.2f}")
+    _delta_r2 = logit_a.prsquared - logit_a_base.prsquared
+    _delta_aic = logit_a.aic - logit_a_base.aic
+    print(f"    {'Δ (Extended − Baseline)':<30}  {_delta_r2:>+12.4f}  {_delta_aic:>+10.2f}")
+
+    print(f"\n  Extended model results (E1+E2):")
+    print(f"  McFadden R² = {logit_a.prsquared:.4f}  |  AIC = {logit_a.aic:.2f}")
     print(f"  Log-Likelihood = {logit_a.llf:.2f}  |  Null LL = {logit_a.llnull:.2f}")
-    print(f"\n  {'Variable':<32} {'Coef':>8}  {'SE':>8}  {'z':>7}  {'p':>8}  {'Sig':>4}")
-    print(f"  {'-'*70}")
+    print(f"\n  {'Variable':<36} {'Coef':>8}  {'SE':>8}  {'z':>7}  {'p':>8}  {'Sig':>4}")
+    print(f"  {'-'*74}")
     _tbl_a = logit_a.summary2().tables[1]
     for _var, _row in _tbl_a.iterrows():
         _sig = ("***" if _row["P>|z|"] < 0.001 else
                 "**"  if _row["P>|z|"] < 0.01  else
                 "*"   if _row["P>|z|"] < 0.05  else "")
-        print(f"  {_var:<32} {_row['Coef.']:>8.4f}  {_row['Std.Err.']:>8.4f}  "
-              f"{_row['z']:>7.4f}  {_row['P>|z|']:>8.4f}  {_sig:>4}")
+        _mark = " ← E1" if "emp_" in _var else " ← E2" if "num_children" in _var else ""
+        print(f"  {_var:<36} {_row['Coef.']:>8.4f}  {_row['Std.Err.']:>8.4f}  "
+              f"{_row['z']:>7.4f}  {_row['P>|z|']:>8.4f}  {_sig:>4}{_mark}")
     print("  Significance: * p<0.05  ** p<0.01  *** p<0.001")
+    print("  Note: Reference group for employment = homemaker (code 6) + unemployed (7) + other."
+          " Codes 8–11 (student-siblings who escort) also fall in reference.")
 
     # ── RQ2a Part B: Binary Logit — who cites safety? ────────────────────────
     section("RQ2a Part B — Binary Logit: Safety Concern Among Escort Group")
