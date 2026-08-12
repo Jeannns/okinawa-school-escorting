@@ -44,6 +44,8 @@ DATA_DIR = (SCRIPT_DIR.parents[1]
 
 # Samsung T5 SSD
 SSD_DIR = Path("/Volumes/Samsung_T5/For Jehan 260721")
+if not SSD_DIR.exists():
+    SSD_DIR = Path("/sessions/awesome-beautiful-pascal/mnt/For Jehan 260721")
 
 # Output folder
 OUT_DIR = SCRIPT_DIR / "data"
@@ -171,12 +173,15 @@ def build_school_trips(data_dir: Path, zone_map: dict) -> pd.DataFrame:
             "escort", "safety", "flag", "q6", "q5", "q4"
         ])
     ]
-    if supp_cols:
+    on_cols = [c for c in ["person_id", "trip_id"] if c in supp.columns and c in school.columns]
+    if supp_cols and on_cols:
         school = school.merge(
             supp[supp_cols].drop_duplicates(),
-            on=[c for c in ["person_id", "trip_id"] if c in supp.columns and c in school.columns],
+            on=on_cols,
             how="left"
         )
+    else:
+        print(f"  ⚠️  Skipping SUPP merge — no join key found (supp_cols={len(supp_cols)}, on_cols={on_cols})")
 
     # ── Merge HH attributes ────────────────────────────────────────────────
     hh_cols = [
