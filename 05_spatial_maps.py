@@ -48,9 +48,7 @@ TABLE_DIR  = PREP_DIR / "tables"
 FIG_DIR    = PREP_DIR / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
-SSD_DIR = Path("/Volumes/Samsung_T5/For Jehan 260721")
-if not SSD_DIR.exists():
-    SSD_DIR = Path("/sessions/awesome-beautiful-pascal/mnt/For Jehan 260721")
+SSD_DIR = Path("/Users/troublemaker/Documents/Documents - troublemaker/Utokto2/Thesis/05_New thesis framework/PT Survey/Okinawa/Samsung_T5/For Jehan 260721")
 
 CZONE_SHP = SSD_DIR / "Okinawa_PT_MasterData" / "01_PopulationFrame" / "shp" / "CZone.shp"
 

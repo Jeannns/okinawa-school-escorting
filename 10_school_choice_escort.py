@@ -53,11 +53,8 @@ FIG_DIR    = DATA_DIR / "figures"
 TABLE_DIR.mkdir(parents=True, exist_ok=True)
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
-SHP_PATH = Path("/sessions/awesome-beautiful-pascal/mnt/For Jehan 260721/"
+SHP_PATH = Path("/Users/troublemaker/Documents/Documents - troublemaker/Utokto2/Thesis/05_New thesis framework/PT Survey/Okinawa/Samsung_T5/For Jehan 260721/"
                 "Okinawa_PT_MasterData/01_PopulationFrame/shp/CZone.shp")
-# Mac fallback
-SHP_PATH_MAC = Path("/Volumes/Samsung_T5/For Jehan 260721/"
-                    "Okinawa_PT_MasterData/01_PopulationFrame/shp/CZone.shp")
 
 
 def section(t):
@@ -86,7 +83,7 @@ def haversine_km(lat1, lon1, lat2, lon2):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def load_zone_centroids():
-    shp_path = SHP_PATH if SHP_PATH.exists() else SHP_PATH_MAC
+    shp_path = SHP_PATH
     gdf = gpd.read_file(shp_path)
     # Columns: Cゾーン, 緯度 (lat), 経度 (lon)
     gdf = gdf.rename(columns={"Cゾーン": "czone", "緯度": "lat", "経度": "lon"})

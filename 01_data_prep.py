@@ -13,7 +13,7 @@ Outputs two CSV files to ./data/:
 
 Dependencies:
   - PT survey data      : ../Okinawa_PT survey/Ver20240430第4回沖縄PTマスターデータ/EN/
-  - SSD data            : /Volumes/Samsung_T5/For Jehan 260721/
+  - SSD data            : /Users/troublemaker/Documents/Documents - troublemaker/Utokto2/Thesis/05_New thesis framework/PT Survey/Okinawa/Samsung_T5/For Jehan 260721/
   - geopandas (F3 only) : pip install geopandas
 
 Notes on LOS join rate:
@@ -43,7 +43,7 @@ DATA_DIR = (SCRIPT_DIR.parents[1]
             / "EN")
 
 # Samsung T5 SSD
-SSD_DIR = Path("/Volumes/Samsung_T5/For Jehan 260721")
+SSD_DIR = Path("/Users/troublemaker/Documents/Documents - troublemaker/Utokto2/Thesis/05_New thesis framework/PT Survey/Okinawa/Samsung_T5/For Jehan 260721")
 
 # Output folder
 OUT_DIR = SCRIPT_DIR / "data"
