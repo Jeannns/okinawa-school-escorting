@@ -2,7 +2,7 @@
 03_school_choice.py — School District GIS Assignment + School Choice Analysis
 ==============================================================================
 Requires: data/school_trips_los.csv     (from 01_data_prep.py)
-          SSD mounted at /Users/troublemaker/Documents/Documents - troublemaker/Utokto2/Thesis/05_New thesis framework/PT Survey/Okinawa/Samsung_T5/For Jehan 260721
+          SSD mounted at /Volumes/Samsung_T5/For Jehan 260721
 
 Analyses:
   P2a (#68) — GIS: join each C-zone centroid → school district polygon
@@ -48,7 +48,10 @@ except ImportError:
 # ══════════════════════════════════════════════════════════════════════════════
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SSD_DIR = Path("/Users/troublemaker/Documents/Documents - troublemaker/Utokto2/Thesis/05_New thesis framework/PT Survey/Okinawa/Samsung_T5/For Jehan 260721")
+SSD_DIR    = Path("/Volumes/Samsung_T5/For Jehan 260721")  # Mac path
+# Sandbox fallback (HFS+ FUSE mount)
+if not SSD_DIR.exists():
+    SSD_DIR = Path("/sessions/awesome-beautiful-pascal/mnt/For Jehan 260721")
 PREP_DIR   = SCRIPT_DIR / "data"
 TABLE_DIR  = PREP_DIR / "tables"
 FIG_DIR    = PREP_DIR / "figures"

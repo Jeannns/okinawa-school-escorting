@@ -2,7 +2,7 @@
 04_counterfactual.py — Counterfactual Simulations (P3b + P3c)
 ==============================================================
 Requires: data/school_trips_los.csv (from 01_data_prep.py)
-          SSD: /Users/troublemaker/Documents/Documents - troublemaker/Utokto2/Thesis/05_New thesis framework/PT Survey/Okinawa/Samsung_T5/For Jehan 260721  (for Future LOS)
+          SSD: /Volumes/Samsung_T5/For Jehan 260721  (for Future LOS)
 Outputs:  data/tables/  ← counterfactual summary tables
           data/figures/ ← scenario comparison figures
 
@@ -62,7 +62,9 @@ FIG_DIR    = PREP_DIR / "figures"
 TABLE_DIR.mkdir(parents=True, exist_ok=True)
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
-SSD_DIR = Path("/Users/troublemaker/Documents/Documents - troublemaker/Utokto2/Thesis/05_New thesis framework/PT Survey/Okinawa/Samsung_T5/For Jehan 260721")
+SSD_DIR = Path("/Volumes/Samsung_T5/For Jehan 260721")
+if not SSD_DIR.exists():
+    SSD_DIR = Path("/sessions/awesome-beautiful-pascal/mnt/For Jehan 260721")
 
 LOS_DIR = SSD_DIR / "Okinawa_PT_MasterData" / "04_LOS_ModalSplitParameters"
 
