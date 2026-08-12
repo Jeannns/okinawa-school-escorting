@@ -53,10 +53,10 @@ FIG_DIR    = DATA_DIR / "figures"
 TABLE_DIR.mkdir(parents=True, exist_ok=True)
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
-SHP_PATH = Path("/sessions/awesome-beautiful-pascal/mnt/For Jehan 260721/"
+SHP_PATH = Path("/Volumes/Samsung_T5/For Jehan 260721/"
                 "Okinawa_PT_MasterData/01_PopulationFrame/shp/CZone.shp")
-# Mac fallback
-SHP_PATH_MAC = Path("/Volumes/Samsung_T5/For Jehan 260721/"
+# Sandbox fallback
+SHP_PATH_MAC = Path("/sessions/awesome-beautiful-pascal/mnt/For Jehan 260721/"
                     "Okinawa_PT_MasterData/01_PopulationFrame/shp/CZone.shp")
 
 
