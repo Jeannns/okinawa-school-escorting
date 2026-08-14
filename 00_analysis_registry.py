@@ -100,6 +100,60 @@ REGISTRY = [
         "notes":   "Requires CZone.shp from SSD",
     },
 
+    # ── RQ1 Descriptive: LOS × Escort Rate ──────────────────────────
+    {
+        "id":      "D1",
+        "script":  "02_los_and_safety.py",
+        "name":    "Escort Rate by Walk Time Quartile",
+        "rq":      "RQ1 descriptive",
+        "desc":    "Bin walk_time → Q1–Q4; cross-tab escort rate per bin; chi-square test",
+        "inputs":  ["school_trips_los.csv"],
+        "outputs": ["data/tables/D1_escort_rate_by_walk_quartile.csv",
+                    "data/figures/D1_escort_rate_walk_quartile.png"],
+        "status":  "done",
+        "key_result": "Escort rate flat across walk_time quartiles: Q1=53.6%, Q4=57.2% — no monotone relationship; LOS null confirmed descriptively",
+        "notes":   "walk_time range: Q1 median=11.5 min, Q4 median=119 min",
+    },
+    {
+        "id":      "D2",
+        "script":  "02_los_and_safety.py",
+        "name":    "Escort Rate by Bus Frequency Group",
+        "rq":      "RQ1 descriptive",
+        "desc":    "Bin bus_freq (0, 1–5, 6–15, 16+); cross-tab escort + car escort rate; chi-square test",
+        "inputs":  ["school_trips_los.csv"],
+        "outputs": ["data/tables/D2_escort_rate_by_bus_frequency.csv",
+                    "data/figures/D2_escort_rate_bus_frequency.png"],
+        "status":  "done",
+        "key_result": "Escort rate ≈ constant: no_bus=55.3%, frequent(16+)=54.2% — transit frequency has no effect on escort incidence",
+        "notes":   "Confirms null result descriptively before logit models",
+    },
+    {
+        "id":      "D3",
+        "script":  "02_los_and_safety.py",
+        "name":    "Car Distance Distribution: School Level × Escort Type",
+        "rq":      "RQ1 descriptive",
+        "desc":    "Box plot + Kruskal-Wallis: car_distance × school_level × escort flag",
+        "inputs":  ["school_trips_los.csv"],
+        "outputs": ["data/tables/D3_car_distance_school_level_escort.csv",
+                    "data/figures/D3_car_distance_school_escort.png"],
+        "status":  "done",
+        "key_result": "Escorted trips slightly farther (Elementary: escort mean 5.6km vs non-escort 4.2km); HS escorted 5.1km vs non-escort 4.7km — distance effect modest",
+        "notes":   "Escorted HS n=3,942 dominates; Elementary escort n=29 only (small sample)",
+    },
+    {
+        "id":      "D4",
+        "script":  "02_los_and_safety.py",
+        "name":    "Zone-Level: Escort Rate vs Mean LOS (Scatter + OLS)",
+        "rq":      "RQ1 descriptive",
+        "desc":    "Aggregate escort rate per C-zone; join mean walk_time + bus_freq; scatter + bivariate correlation",
+        "inputs":  ["school_trips_los.csv"],
+        "outputs": ["data/tables/D4_zone_level_escort_vs_los.csv",
+                    "data/figures/D4_zone_escort_vs_bus_freq.png"],
+        "status":  "done",
+        "key_result": "139 C-zones; corr(escort, walk_min)=+0.181; corr(escort, bus_freq)=−0.175 — both weak; spatial LOS does not predict zone-level escort rate",
+        "notes":   "Zone-level analysis corroborates individual-level null result",
+    },
+
     # ── RQ2a: Escort Decision ────────────────────────────────────────
     {
         "id":      "B1",
@@ -178,7 +232,7 @@ REGISTRY = [
 
     # ── LOS Counterfactual ───────────────────────────────────────────
     {
-        "id":      "D1",
+        "id":      "P3b",
         "script":  "04_counterfactual.py",
         "name":    "P3b: Bus Frequency Counterfactual",
         "rq":      "RQ2 policy",
@@ -190,7 +244,7 @@ REGISTRY = [
         "notes":   "Null result: confirms LOS improvement cannot change escort behavior in car-dominant city",
     },
     {
-        "id":      "D2",
+        "id":      "P3c",
         "script":  "04_counterfactual.py",
         "name":    "P3c: Future LOS Counterfactual",
         "rq":      "RQ2 policy",
