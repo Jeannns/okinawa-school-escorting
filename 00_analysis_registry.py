@@ -298,6 +298,51 @@ REGISTRY = [
         "notes":   "",
     },
 
+    # ── Safety & Population ──────────────────────────────────────────
+    {
+        "id":      "E2",
+        "script":  "12_e2_crime_safety.py",
+        "name":    "Objective Safety: Crime Density vs Escort Rate",
+        "rq":      "RQ2 safety",
+        "desc":    ("Municipality-level crime density (2,588 records, 7 crime types, 2023) "
+                    "vs escort rate; iconv Shift-JIS workaround; "
+                    "crime per 100 school trips as density proxy; "
+                    "perceived safety cross-check via SUPP q6_child_escort_reason=='02'"),
+        "inputs":  ["Okinawa crime record 2023/*.csv", "school_trips_los.csv",
+                    "R05_Supplementary_EN.csv"],
+        "outputs": ["figures/E2_crime_vs_escort_scatter.png",
+                    "figures/E2_crime_density_by_muni.png",
+                    "figures/E2_perceived_vs_objective_safety.png",
+                    "data/e2_crime_escort_muni.csv"],
+        "status":  "done",
+        "key_result": ("Pearson r=0.236 (p=0.345), Spearman ρ=-0.373 (p=0.128): "
+                       "no significant link between objective crime and escort rate; "
+                       "perceived safety rate also uncorrelated with crime density (r=-0.410, p=0.102); "
+                       "outlier: Nanjo 688.9 crimes/100 trips (n=18 trips, sparse sample)"),
+        "notes":   "Municipality-level only — no town-block→C-zone crosswalk for finer resolution",
+    },
+    {
+        "id":      "E5",
+        "script":  "13_e5_pop_weighted.py",
+        "name":    "Population-Weighted Escort Rate by C-zone",
+        "rq":      "RQ1 representativeness",
+        "desc":    ("HH Survey school-age proxy (employment_student_status 8/9/10, "
+                    "addr_zone_code first 3 digits → C-zone) as population weight; "
+                    "compare raw per-trip rate vs zone-mean (unweighted, trip-weighted, pop-weighted)"),
+        "inputs":  ["school_trips_los.csv", "R05_HH_Survey_EN.csv"],
+        "outputs": ["figures/E5_pop_weight_comparison.png",
+                    "figures/E5_zone_deviation.png",
+                    "data/e5_zone_escort_popweight.csv"],
+        "status":  "done",
+        "key_result": ("Raw per-trip=55.5%, pop-weighted zone mean=56.9% (diff=+1.44 %pt); "
+                       "sample slightly under-represents high-escort zones; "
+                       "by level: Elementary=1.9%, Middle=3.8%, HS=97.8% (all uniform across zones); "
+                       "139 C-zones, 92 with HH pop data, 7,439 school-age HH members as proxy"),
+        "notes":   ("HS escort=97.9% reflects car-dependent school commute in Okinawa, "
+                    "not safety-motivated escorting; HH Survey proxy = enrolled school-age count, "
+                    "not actual catchment population"),
+    },
+
 ]
 
 # ══════════════════════════════════════════════════════════════════════
