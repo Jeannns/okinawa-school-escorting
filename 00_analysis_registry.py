@@ -343,6 +343,84 @@ REGISTRY = [
                     "not actual catchment population"),
     },
 
+    # ── SSD Retrofit Extensions ──────────────────────────────────────────
+    {
+        "id":      "A1b",
+        "script":  "14_a1b_a3b_distance.py",
+        "name":    "Distance by Level (direct measure, SSD retrofit)",
+        "rq":      "RQ1 descriptive",
+        "desc":    ("Replaces travel_time proxy with car_distance_m from SSD LOS. "
+                    "Kruskal-Wallis + pairwise Mann-Whitney of car_dist_km by school_level. "
+                    "Rationale: mode1_travel_time_min conflates mode with distance — "
+                    "HS car-driven so time is short despite farther spatial coverage."),
+        "inputs":  ["school_trips_los.csv"],
+        "outputs": ["figures/A1b_distance_by_level.png", "data/a1b_distance_summary.csv"],
+        "status":  "done",
+        "key_result": ("KW H significant; medians: Elementary=3.02km, Middle=3.59km, HS=3.50km; "
+                       "travel_time median identical across levels (~15 min) — confirming proxy failure; "
+                       "car_distance_m differentiates spatial coverage independent of mode speed; "
+                       "n=7,414 with valid car_distance_m"),
+        "notes":   "Original A1 (analysis_rq.py) preserved unchanged",
+    },
+    {
+        "id":      "A3b",
+        "script":  "14_a1b_a3b_distance.py",
+        "name":    "OLS: Car Distance ~ Car Ownership + Level (SSD retrofit)",
+        "rq":      "RQ1 descriptive",
+        "desc":    ("Replaces A3 DV (travel_time) with car_distance_m. "
+                    "M1: car_dist_km ~ has_car + school_level. "
+                    "M2: adds has_car × school_level interaction. "
+                    "Rationale: distance is exogenous to mode; travel_time is endogenous."),
+        "inputs":  ["school_trips_los.csv"],
+        "outputs": ["figures/A3b_ols_distance_car.png", "data/a3b_ols_results.csv"],
+        "status":  "done",
+        "key_result": ("M1: has_car β=+1.32km*** (p<0.001); HS β=+0.71km***, Middle β=+0.71km***; "
+                       "R²=0.0085 (low — distance is variable within all groups); "
+                       "M2 interaction: has_car×HS β=−3.37** (p=0.0005) — no-car HS travel farther than car HS "
+                       "(counter-intuitive, may reflect geographic necessity without car access)"),
+        "notes":   "Original A3 (analysis_rq.py) preserved unchanged",
+    },
+    {
+        "id":      "TC-b",
+        "script":  "15_tc_b_los.py",
+        "name":    "Trip Chaining + LOS Distance (SSD extension)",
+        "rq":      "RQ2 mechanism",
+        "desc":    ("Extends TC logit by adding car_dist_km_std + walk_time_std as predictors. "
+                    "Tests whether spatial distance (farther school → more likely to chain escort "
+                    "with work commute). Sample: commuting escort parents (has_work_trip=1)."),
+        "inputs":  ["school_trips_los.csv", "R05_PersonTrip_EN.csv"],
+        "outputs": ["figures/TC_b_logit_comparison.png", "data/tc_b_logit_results.csv"],
+        "status":  "done",
+        "key_result": ("car_dist_std β=+0.333*** (p<0.001) in TC_b_car_dist — farther school → more chaining; "
+                       "walk_time_std n.s. when added alongside car_dist (multicollinearity); "
+                       "ΔMcF-R²=+0.014 vs TC_original; ΔAIC=−25.4 (better fit); "
+                       "Chaining rate rises monotonically: Q1(0.91km)=67.4% → Q5(12.8km)=80.4%; "
+                       "r(car_dist, chaining)=+0.103"),
+        "notes":   "Original TC (07_trip_chaining.py) preserved unchanged",
+    },
+    {
+        "id":      "SC-b",
+        "script":  "16_sc_b_distance.py",
+        "name":    "School Choice × Escort + Continuous Distance (SSD extension)",
+        "rq":      "RQ1+RQ2",
+        "desc":    ("Extends SC by adding car_dist_km as continuous predictor alongside binary "
+                    "school_choice flag. Tests whether within-catchment or out-of-catchment, "
+                    "distance additionally predicts escort. Sample: Elementary + Middle only "
+                    "(HS excluded from catchment analysis by design)."),
+        "inputs":  ["school_choice_trips.csv"],
+        "outputs": ["figures/SC_b_logit_comparison.png", "data/sc_b_logit_results.csv"],
+        "status":  "done",
+        "key_result": ("car_dist_std β≈0.002 (p=0.981) — null; r(car_dist, escort)=0.001 (p=0.962); "
+                       "school_choice β=−0.241 (n.s.); car_own β=+0.469 (n.s.); "
+                       "ΔAIC=+2.0 (adding distance makes model worse); "
+                       "Interpretation: SC sample (Elem+Middle) has very low escort rate (~3%) "
+                       "→ insufficient DV variance for distance effect to surface; "
+                       "HS dominates escort behavior but is excluded here by design"),
+        "notes":   "Null result is informative: distance only matters in HS (car commute), "
+                   "not in Elem/Middle where independent walking dominates. "
+                   "Original SC (03_school_choice.py) preserved unchanged.",
+    },
+
 ]
 
 # ══════════════════════════════════════════════════════════════════════
